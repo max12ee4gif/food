@@ -117,6 +117,29 @@ export type AdminBoard = {
       status: DayStatus;
     }
   >;
+  debts: DebtItem[];
+  customDishes: CustomDish[];
+};
+
+export type DebtStatus = "open" | "paid" | "removed";
+
+export type DebtItem = {
+  id: number;
+  reservationId: number | null;
+  name: string;
+  phone: string;
+  phoneDisplay: string;
+  amountCents: number;
+  serviceDate: string;
+  dateLabel: string;
+  status: DebtStatus;
+};
+
+export type CustomDish = {
+  id: number;
+  name: string;
+  photo: string | null;
+  notes: string;
 };
 
 export type DishPreset = {

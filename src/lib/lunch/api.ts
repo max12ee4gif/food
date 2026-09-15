@@ -111,3 +111,63 @@ export const reminderPreview = createServerFn({ method: "POST" }).handler(async 
   const { reminderPreviewData } = await import("./board.server");
   return reminderPreviewData();
 });
+
+export const addDebt = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      name: z.string().min(1).max(80),
+      phone: z.string().min(7).max(20),
+      quantity: z.number().int().min(1).max(40),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { addDebtData } = await import("./board.server");
+    return addDebtData(data);
+  });
+
+export const adjustDebt = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      id: z.number().int(),
+      deltaPlates: z.number().int(),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { adjustDebtData } = await import("./board.server");
+    return adjustDebtData(data);
+  });
+
+export const payDebt = createServerFn({ method: "POST" })
+  .validator(z.object({ id: z.number().int() }))
+  .handler(async ({ data }) => {
+    const { payDebtData } = await import("./board.server");
+    return payDebtData(data);
+  });
+
+export const removeDebt = createServerFn({ method: "POST" })
+  .validator(z.object({ id: z.number().int() }))
+  .handler(async ({ data }) => {
+    const { removeDebtData } = await import("./board.server");
+    return removeDebtData(data);
+  });
+
+export const saveCustomDish = createServerFn({ method: "POST" })
+  .validator(
+    z.object({
+      name: z.string().min(1).max(80),
+      photoUrl: z.string().max(400000).nullable(),
+      notes: z.string().max(280),
+    }),
+  )
+  .handler(async ({ data }) => {
+    const { saveCustomDishData } = await import("./board.server");
+    return saveCustomDishData(data);
+  });
+
+export const deleteCustomDish = createServerFn({ method: "POST" })
+  .validator(z.object({ id: z.number().int() }))
+  .handler(async ({ data }) => {
+    const { deleteCustomDishData } = await import("./board.server");
+    return deleteCustomDishData(data);
+  });
+

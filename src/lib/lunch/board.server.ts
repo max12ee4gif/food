@@ -21,7 +21,9 @@ import {
   type AdminBoard,
   type AdminDay,
   type AdminReservation,
+  type CustomDish,
   type DayStatus,
+  type DebtItem,
   type DeliveryStatus,
   type HistoryItem,
   type MoneyTotals,
@@ -75,6 +77,25 @@ type ReservationRow = {
   delivery_status: string;
   phone_verified: boolean;
   created_at: string;
+};
+
+type DebtRow = {
+  id: number;
+  reservation_id: number | null;
+  name: string;
+  phone: string;
+  amount_cents: number;
+  service_date: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+type CustomDishRow = {
+  id: number;
+  name: string;
+  photo_url: string | null;
+  notes: string | null;
 };
 
 function hashSmsCode(phone: string, code: string) {
@@ -138,34 +159,119 @@ function moneyTotals(
   reservations: AdminReservation[],
   capacity: number,
   priceCents: number,
+  debts: DebtItem[] = [],
 ): MoneyTotals {
-  const active = reservations.filter((r) => r.deliveryStatus !== "cancelled");
-  const platesReserved = active.reduce((n, r) => n + r.quantity, 0);
-  const platesDelivered = active
+  const billable = reservations.filter(
+    (r) => r.deliveryStatus !== "cancelled" && r.deliveryStatus !== "noshow",
+  );
+  const platesReserved = reservations
+    .filter((r) => r.deliveryStatus !== "cancelled")
+    .reduce((n, r) => n + r.quantity, 0);
+  const platesDelivered = reservations
     .filter((r) => r.deliveryStatus === "delivered")
     .reduce((n, r) => n + r.quantity, 0);
-  const platesNoshow = active
+  const platesNoshow = reservations
     .filter((r) => r.deliveryStatus === "noshow")
     .reduce((n, r) => n + r.quantity, 0);
-  const collectedPlates = active
+  const collectedPlates = billable
     .filter((r) => r.paymentStatus === "cash" || r.paymentStatus === "online")
     .reduce((n, r) => n + r.quantity, 0);
-  const debtPlates = active
-    .filter((r) => r.paymentStatus === "debt")
-    .reduce((n, r) => n + r.quantity, 0);
-  const pendingPlates = active
+  const pendingPlates = billable
     .filter((r) => r.paymentStatus === "pending")
     .reduce((n, r) => n + r.quantity, 0);
+  const openDebtCents = debts
+    .filter((d) => d.status === "open")
+    .reduce((n, d) => n + d.amountCents, 0);
+  const paidManualCents = debts
+    .filter((d) => d.status === "paid" && d.reservationId == null)
+    .reduce((n, d) => n + d.amountCents, 0);
   return {
     platesReserved,
     platesDelivered,
     platesNoshow,
     capacity,
-    collectedCents: collectedPlates * priceCents,
+    collectedCents: collectedPlates * priceCents + paidManualCents,
     pendingCents: pendingPlates * priceCents,
-    debtCents: debtPlates * priceCents,
+    debtCents: openDebtCents,
     potentialCents: platesReserved * priceCents,
   };
+}
+
+function mapDebt(row: DebtRow): DebtItem {
+  const serviceDate = ymdOf(row.service_date);
+  return {
+    id: row.id,
+    reservationId: row.reservation_id,
+    name: row.name,
+    phone: row.phone,
+    phoneDisplay: formatPhone(row.phone),
+    amountCents: row.amount_cents,
+    serviceDate,
+    dateLabel: dateLabel(serviceDate),
+    status: (row.status as DebtItem["status"]) || "open",
+  };
+}
+
+async function loadDebts(sql: Sql): Promise<DebtItem[]> {
+  const rows = await sql<DebtRow>`
+    select * from debts
+    where status <> 'removed'
+    order by created_at desc
+  `;
+  return rows.map(mapDebt);
+}
+
+async function loadCustomDishes(sql: Sql): Promise<CustomDish[]> {
+  const rows = await sql<CustomDishRow>`
+    select * from custom_dishes order by created_at asc
+  `;
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    photo: row.photo_url,
+    notes: row.notes ?? "",
+  }));
+}
+
+async function upsertReservationDebt(
+  sql: Sql,
+  row: ReservationRow,
+  serviceDate: string,
+  priceCents: number,
+): Promise<void> {
+  const existing = await sql<{ id: number }>`
+    select id from debts
+    where reservation_id = ${row.id} and status = 'open'
+    limit 1
+  `;
+  const amount = row.quantity * priceCents;
+  if (existing[0]) {
+    await sql`
+      update debts
+      set amount_cents = ${amount},
+          name = ${row.name},
+          phone = ${row.phone},
+          updated_at = now()
+      where id = ${existing[0].id}
+    `;
+    return;
+  }
+  await sql`
+    insert into debts (reservation_id, name, phone, amount_cents, service_date, status)
+    values (${row.id}, ${row.name}, ${row.phone}, ${amount}, ${serviceDate}, 'open')
+  `;
+}
+
+async function closeLinkedDebt(
+  sql: Sql,
+  reservationId: number,
+  status: "paid" | "removed",
+): Promise<void> {
+  await sql`
+    update debts
+    set status = ${status}, updated_at = now()
+    where reservation_id = ${reservationId} and status = 'open'
+  `;
 }
 
 function mapReservation(row: ReservationRow): AdminReservation {
@@ -579,7 +685,11 @@ export async function logoutAdminData(): Promise<{ ok: true }> {
   return { ok: true };
 }
 
-async function buildAdminDay(sql: Sql, row: DayRow): Promise<AdminDay> {
+async function buildAdminDay(
+  sql: Sql,
+  row: DayRow,
+  debts: DebtItem[] = [],
+): Promise<AdminDay> {
   const resRows = await sql<ReservationRow>`
     select * from reservations
     where service_day_id = ${row.id}
@@ -605,7 +715,7 @@ async function buildAdminDay(sql: Sql, row: DayRow): Promise<AdminDay> {
     remaining: Math.max(0, row.capacity - reserved),
     reserved,
     reservations,
-    totals: moneyTotals(reservations, row.capacity, row.price_cents),
+    totals: moneyTotals(reservations, row.capacity, row.price_cents, debts),
   };
 }
 
@@ -627,13 +737,17 @@ export async function getAdminBoardData(): Promise<AdminBoard> {
       day: null,
       upcoming: [],
       history: [],
+      debts: [],
+      customDishes: [],
     };
   }
 
   const settings = await getSettings(sql);
   const clock = readClock();
+  const debts = await loadDebts(sql);
+  const customDishes = await loadCustomDishes(sql);
   const dayRow = await pickActiveDay(sql, clock.ymd);
-  const day = dayRow ? await buildAdminDay(sql, dayRow) : null;
+  const day = dayRow ? await buildAdminDay(sql, dayRow, debts) : null;
   const override =
     settings.phase_override === "early" || settings.phase_override === "leftover"
       ? settings.phase_override
@@ -699,6 +813,8 @@ export async function getAdminBoardData(): Promise<AdminBoard> {
     day,
     upcoming,
     history,
+    debts: debts.filter((d) => d.status === "open"),
+    customDishes,
   };
 }
 
@@ -804,6 +920,117 @@ export async function updateReservationData(input: {
         delivery_status = ${deliveryStatus}
     where id = ${input.id}
   `;
+  const updated = { ...rows[0], payment_status: paymentStatus, delivery_status: deliveryStatus };
+  const dayRows = await sql<{ service_date: string; price_cents: number }>`
+    select service_date, price_cents from service_days where id = ${updated.service_day_id}
+  `;
+  const serviceDate = ymdOf(dayRows[0]?.service_date ?? readClock().ymd);
+  const priceCents = Number(dayRows[0]?.price_cents ?? PRICE_CENTS);
+
+  if (deliveryStatus === "noshow") {
+    await closeLinkedDebt(sql, updated.id, "removed");
+  } else if (paymentStatus === "debt") {
+    await upsertReservationDebt(sql, updated, serviceDate, priceCents);
+  } else if (paymentStatus === "cash" || paymentStatus === "online") {
+    await closeLinkedDebt(sql, updated.id, "paid");
+  }
+
+  return { ok: true };
+}
+
+export async function addDebtData(input: {
+  name: string;
+  phone: string;
+  quantity: number;
+}): Promise<{ id: number }> {
+  const sql = await getSql();
+  await requireAdmin(sql);
+  const name = input.name.trim();
+  if (name.length < 2) throw new Error("Pon el nombre.");
+  const phone = normalizePhone(input.phone);
+  if (!phone) throw new Error("Pon un número de EE.UU. de 10 dígitos.");
+  const qty = Math.max(1, Math.floor(input.quantity));
+  const clock = readClock();
+  const dayRow = await pickActiveDay(sql, clock.ymd);
+  const serviceDate = dayRow ? ymdOf(dayRow.service_date) : clock.ymd;
+  const settings = await getSettings(sql);
+  const amount = qty * settings.price_cents;
+  const inserted = await sql<{ id: number }>`
+    insert into debts (reservation_id, name, phone, amount_cents, service_date, status)
+    values (null, ${name}, ${phone}, ${amount}, ${serviceDate}, 'open')
+    returning id
+  `;
+  const id = inserted[0]?.id;
+  if (!id) throw new Error("No se pudo guardar la deuda.");
+  return { id };
+}
+
+export async function adjustDebtData(input: {
+  id: number;
+  deltaPlates: number;
+}): Promise<{ ok: true }> {
+  const sql = await getSql();
+  await requireAdmin(sql);
+  const rows = await sql<DebtRow>`select * from debts where id = ${input.id} and status = 'open'`;
+  if (!rows[0]) throw new Error("Deuda no encontrada.");
+  const settings = await getSettings(sql);
+  const next = Math.max(0, rows[0].amount_cents + input.deltaPlates * settings.price_cents);
+  await sql`
+    update debts set amount_cents = ${next}, updated_at = now() where id = ${input.id}
+  `;
+  return { ok: true };
+}
+
+export async function payDebtData(input: { id: number }): Promise<{ ok: true }> {
+  const sql = await getSql();
+  await requireAdmin(sql);
+  const rows = await sql<DebtRow>`select * from debts where id = ${input.id} and status = 'open'`;
+  if (!rows[0]) throw new Error("Deuda no encontrada.");
+  await sql`update debts set status = 'paid', updated_at = now() where id = ${input.id}`;
+  if (rows[0].reservation_id) {
+    await sql`
+      update reservations
+      set payment_status = 'cash'
+      where id = ${rows[0].reservation_id}
+    `;
+  }
+  return { ok: true };
+}
+
+export async function removeDebtData(input: { id: number }): Promise<{ ok: true }> {
+  const sql = await getSql();
+  await requireAdmin(sql);
+  const rows = await sql<DebtRow>`select * from debts where id = ${input.id} and status = 'open'`;
+  if (!rows[0]) throw new Error("Deuda no encontrada.");
+  await sql`update debts set status = 'removed', updated_at = now() where id = ${input.id}`;
+  return { ok: true };
+}
+
+export async function saveCustomDishData(input: {
+  name: string;
+  photoUrl: string | null;
+  notes: string;
+}): Promise<{ id: number }> {
+  const sql = await getSql();
+  await requireAdmin(sql);
+  const name = input.name.trim();
+  if (name.length < 2) throw new Error("Pon el nombre del platillo.");
+  const notes = input.notes.trim() || null;
+  const photoUrl = input.photoUrl?.trim() || null;
+  const inserted = await sql<{ id: number }>`
+    insert into custom_dishes (name, photo_url, notes)
+    values (${name}, ${photoUrl}, ${notes})
+    returning id
+  `;
+  const id = inserted[0]?.id;
+  if (!id) throw new Error("No se pudo guardar el platillo.");
+  return { id };
+}
+
+export async function deleteCustomDishData(input: { id: number }): Promise<{ ok: true }> {
+  const sql = await getSql();
+  await requireAdmin(sql);
+  await sql`delete from custom_dishes where id = ${input.id}`;
   return { ok: true };
 }
 

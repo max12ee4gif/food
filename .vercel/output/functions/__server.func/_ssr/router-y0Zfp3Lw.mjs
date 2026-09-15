@@ -4,10 +4,10 @@ import { _ as createRootRoute, d as HeadContent, g as createFileRoute, h as lazy
 import { n as QueryClientProvider, r as require_jsx_runtime } from "../_libs/react+tanstack__react-query.mjs";
 import { a as __exportAll, i as getServerFnById, n as createServerFn, r as TSS_SERVER_FUNCTION } from "./ssr.mjs";
 import { a as string, i as object, n as literal, o as union, r as number, t as _enum } from "../_libs/zod.mjs";
-import { t as TriangleAlert } from "../_libs/lucide-react.mjs";
+import { n as TriangleAlert } from "../_libs/lucide-react.mjs";
 import { t as QueryClient } from "../_libs/tanstack__query-core.mjs";
 import { t as Toaster } from "../_libs/sonner.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/api-KGyeW-jr.js
+//#region node_modules/.nitro/vite/services/ssr/assets/api-1nNJ0BwN.js
 var createSsrRpc = (functionId) => {
 	const url = "/_serverFn/" + functionId;
 	const serverFnMeta = { id: functionId };
@@ -67,8 +67,25 @@ var saveConfig = createServerFn({ method: "POST" }).validator(object({
 	phaseOverride: _enum(["early", "leftover"]).nullable()
 })).handler(createSsrRpc("01e9ef76f87be3aea11485bdba36497e07e2199b6fa6d5dd6d4bd29e5c81d888"));
 var reminderPreview = createServerFn({ method: "POST" }).handler(createSsrRpc("e0807774d926089e71b77332662fdcdb0423f37f233fbba53e041c194e12c451"));
+var addDebt = createServerFn({ method: "POST" }).validator(object({
+	name: string().min(1).max(80),
+	phone: string().min(7).max(20),
+	quantity: number().int().min(1).max(40)
+})).handler(createSsrRpc("c9e5407233240db9644a2ac0e587c32688f8e1592b7883116b4effa17511bfb0"));
+var adjustDebt = createServerFn({ method: "POST" }).validator(object({
+	id: number().int(),
+	deltaPlates: number().int()
+})).handler(createSsrRpc("6d1f7c47c36631ae4e21591286dfa69a8e160ea027009fd216a26b0ed1840e30"));
+var payDebt = createServerFn({ method: "POST" }).validator(object({ id: number().int() })).handler(createSsrRpc("f5ddf444507cba82b92d62076e8632922592d925c7be1f521bf49e11f77f111b"));
+var removeDebt = createServerFn({ method: "POST" }).validator(object({ id: number().int() })).handler(createSsrRpc("22c1932a671e43ed8d542aa6b43c35e8ab9d1bc387e943651760fca232260b77"));
+var saveCustomDish = createServerFn({ method: "POST" }).validator(object({
+	name: string().min(1).max(80),
+	photoUrl: string().max(4e5).nullable(),
+	notes: string().max(280)
+})).handler(createSsrRpc("ead5414a7e20614c6fbdb47e1f1eb78e6530bd8248eaded00e587f4f19047a67"));
+var deleteCustomDish = createServerFn({ method: "POST" }).validator(object({ id: number().int() })).handler(createSsrRpc("e4b8cb43b951b1be4f89cf4fb65449a5abc0df9c5c98008488ae198a3bcc478e"));
 //#endregion
-//#region node_modules/.nitro/vite/services/ssr/assets/router-btutxuXC.js
+//#region node_modules/.nitro/vite/services/ssr/assets/router-y0Zfp3Lw.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var FALLBACK_MESSAGE = "An unexpected error occurred. Try reloading the page.";
@@ -362,7 +379,7 @@ function PreviewHostBridge() {
 	}, [router]);
 	return null;
 }
-var styles_default = "/assets/styles-CVE7oK5t.css";
+var styles_default = "/assets/styles-BGSMzjnH.css";
 var APP_NAME = "Hoy Hay";
 var queryClient = new QueryClient({ defaultOptions: { queries: {
 	refetchOnWindowFocus: true,
@@ -450,12 +467,12 @@ function RootShell() {
 		})]
 	});
 }
-var $$splitComponentImporter$1 = () => import("./routes-Bkg4sRIH.mjs");
+var $$splitComponentImporter$1 = () => import("./routes-BXYL75G2.mjs");
 var Route$1 = createFileRoute("/")({
 	loader: () => getPublicBoard(),
 	component: lazyRouteComponent($$splitComponentImporter$1, "component")
 });
-var $$splitComponentImporter = () => import("./admin-CdbQ0boR.mjs");
+var $$splitComponentImporter = () => import("./admin-Bx6AZrrH.mjs");
 var Route = createFileRoute("/admin")({
 	loader: () => getAdminBoard(),
 	component: lazyRouteComponent($$splitComponentImporter, "component")
@@ -481,4 +498,4 @@ function getRouter() {
 	});
 }
 //#endregion
-export { closeDay as a, getPublicBoard as c, publishDay as d, reminderPreview as f, updateReservation as h, cancelDay as i, loginAdmin as l, startReserve as m, Route as n, confirmReserve as o, saveConfig as p, Route$1 as r, getAdminBoard as s, router_exports as t, logoutAdmin as u };
+export { removeDebt as _, adjustDebt as a, startReserve as b, confirmReserve as c, getPublicBoard as d, loginAdmin as f, reminderPreview as g, publishDay as h, addDebt as i, deleteCustomDish as l, payDebt as m, Route as n, cancelDay as o, logoutAdmin as p, Route$1 as r, closeDay as s, router_exports as t, getAdminBoard as u, saveConfig as v, updateReservation as x, saveCustomDish as y };

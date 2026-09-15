@@ -2,10 +2,11 @@ import { o as __toESM } from "../_runtime.mjs";
 import { c as nextServiceDate, l as readClock, t as DISH_PRESETS } from "./time-D7K8VdEQ.mjs";
 import { n as require_react } from "../_libs/@radix-ui/react-compose-refs+[...].mjs";
 import { r as require_jsx_runtime, t as useQuery } from "../_libs/react+tanstack__react-query.mjs";
+import { r as Plus, t as X } from "../_libs/lucide-react.mjs";
 import { n as toast } from "../_libs/sonner.mjs";
-import { a as closeDay, d as publishDay, f as reminderPreview, h as updateReservation, i as cancelDay, l as loginAdmin, n as Route, p as saveConfig, s as getAdminBoard, u as logoutAdmin } from "./router-btutxuXC.mjs";
+import { _ as removeDebt, a as adjustDebt, f as loginAdmin, g as reminderPreview, h as publishDay, i as addDebt, l as deleteCustomDish, m as payDebt, n as Route, o as cancelDay, p as logoutAdmin, s as closeDay, u as getAdminBoard, v as saveConfig, x as updateReservation, y as saveCustomDish } from "./router-y0Zfp3Lw.mjs";
 import { i as formatMoney, n as Input, r as Label, t as Button } from "./label-m5Eb5csY.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/admin-CdbQ0boR.js
+//#region node_modules/.nitro/vite/services/ssr/assets/admin-Bx6AZrrH.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 async function compressImage(file, maxEdge = 960, quality = .76) {
@@ -147,15 +148,16 @@ function SignedIn({ board, onRefresh }) {
 				})]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("nav", {
-				className: "mx-5 grid grid-cols-3 rounded-md bg-line/70 p-1",
+				className: "mx-5 grid grid-cols-4 rounded-md bg-line/70 p-1",
 				children: [
 					["hoy", "Hoy"],
+					["deudas", "Deudas"],
 					["historial", "Historial"],
 					["config", "Config"]
 				].map(([id, label]) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
 					type: "button",
 					onClick: () => setTab(id),
-					className: `h-10 rounded-sm text-sm font-semibold ${tab === id ? "bg-raised text-ink shadow-card" : "text-muted"}`,
+					className: `h-10 rounded-sm text-xs font-semibold ${tab === id ? "bg-raised text-ink shadow-card" : "text-muted"}`,
 					children: label
 				}, id))
 			}),
@@ -163,6 +165,10 @@ function SignedIn({ board, onRefresh }) {
 				className: "flex-1 px-5 py-5",
 				children: [
 					tab === "hoy" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(HoyTab, {
+						board,
+						onRefresh
+					}),
+					tab === "deudas" && /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DebtsTab, {
 						board,
 						onRefresh
 					}),
@@ -205,6 +211,11 @@ function PublishCard({ board, onRefresh }) {
 	const [notes, setNotes] = (0, import_react.useState)(day?.notes ?? DISH_PRESETS[0].notes);
 	const [capacity, setCapacity] = (0, import_react.useState)(day?.capacity ?? board.defaultCapacity);
 	const [busy, setBusy] = (0, import_react.useState)(false);
+	const [addingCustom, setAddingCustom] = (0, import_react.useState)(false);
+	const [customName, setCustomName] = (0, import_react.useState)("");
+	const [customNotes, setCustomNotes] = (0, import_react.useState)("");
+	const [customPhoto, setCustomPhoto] = (0, import_react.useState)(null);
+	const [customBusy, setCustomBusy] = (0, import_react.useState)(false);
 	async function onFile(file) {
 		if (!file) return;
 		try {
@@ -213,6 +224,19 @@ function PublishCard({ board, onRefresh }) {
 		} catch {
 			toast.error("No se pudo leer la foto.");
 		}
+	}
+	async function onCustomFile(file) {
+		if (!file) return;
+		try {
+			setCustomPhoto(await compressImage(file));
+		} catch {
+			toast.error("No se pudo leer la foto.");
+		}
+	}
+	function pickDish(name, photo, notes) {
+		setDishName(name);
+		setPhotoUrl(photo);
+		setNotes(notes);
 	}
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 		className: "flex flex-col gap-4",
@@ -239,26 +263,161 @@ function PublishCard({ board, onRefresh }) {
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "mb-2 text-sm font-medium text-muted",
 				children: "Platillo rápido"
-			}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "grid grid-cols-3 gap-2",
-				children: DISH_PRESETS.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
-					type: "button",
-					onClick: () => {
-						setDishName(p.name);
-						setPhotoUrl(p.photo);
-						setNotes(p.notes);
-					},
-					className: `overflow-hidden rounded-md border text-left ${photoUrl === p.photo ? "border-ink" : "border-line"}`,
-					children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
-						src: p.photo,
-						alt: "",
-						className: "h-16 w-full object-cover"
-					}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
-						className: "block truncate px-2 py-1 text-[11px] font-medium text-ink",
-						children: p.name
-					})]
-				}, p.id))
+				children: [
+					DISH_PRESETS.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+						type: "button",
+						onClick: () => pickDish(p.name, p.photo, p.notes),
+						className: `overflow-hidden rounded-md border text-left ${photoUrl === p.photo ? "border-ink" : "border-line"}`,
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+							src: p.photo,
+							alt: "",
+							className: "h-16 w-full object-cover"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "block truncate px-2 py-1 text-xs font-medium text-ink",
+							children: p.name
+						})]
+					}, p.id)),
+					board.customDishes.map((p) => /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: `relative overflow-hidden rounded-md border ${photoUrl === p.photo ? "border-ink" : "border-line"}`,
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+							type: "button",
+							className: "absolute right-1 top-1 z-10 flex size-8 items-center justify-center rounded-sm bg-raised text-ink",
+							"aria-label": `Quitar ${p.name}`,
+							onClick: (e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								(async () => {
+									try {
+										await deleteCustomDish({ data: { id: p.id } });
+										if (photoUrl === p.photo) setPhotoUrl(null);
+										onRefresh();
+									} catch (err) {
+										toast.error(err instanceof Error ? err.message : "No se pudo borrar.");
+									}
+								})();
+							},
+							children: /* @__PURE__ */ (0, import_jsx_runtime.jsx)(X, { className: "size-4" })
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+							type: "button",
+							className: "w-full text-left",
+							onClick: () => pickDish(p.name, p.photo, p.notes),
+							children: [p.photo ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+								src: p.photo,
+								alt: "",
+								className: "h-16 w-full object-cover"
+							}) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("div", {
+								className: "flex h-16 items-center justify-center bg-line text-xs text-muted",
+								children: "Sin foto"
+							}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+								className: "block truncate px-2 py-1 text-xs font-medium text-ink",
+								children: p.name
+							})]
+						})]
+					}, p.id)),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("button", {
+						type: "button",
+						onClick: () => setAddingCustom(true),
+						className: "flex min-h-[5.5rem] flex-col items-center justify-center gap-1 rounded-md border border-dashed border-ink/30 bg-raised px-2 text-ink",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Plus, { className: "size-5" }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("span", {
+							className: "text-xs font-semibold",
+							children: "Otro platillo"
+						})]
+					})
+				]
 			})] }),
+			addingCustom && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "flex flex-col gap-3 rounded-lg border border-line bg-raised p-4",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+						className: "text-sm font-semibold text-ink",
+						children: "Nuevo platillo"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-col gap-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Label, {
+							htmlFor: "custom-name",
+							children: "Nombre"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
+							id: "custom-name",
+							value: customName,
+							onChange: (e) => setCustomName(e.target.value),
+							placeholder: "Ej. Arroz frito"
+						})]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-col gap-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Label, {
+							htmlFor: "custom-notes",
+							children: "Notas"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("textarea", {
+							id: "custom-notes",
+							value: customNotes,
+							onChange: (e) => setCustomNotes(e.target.value),
+							rows: 2,
+							className: "w-full rounded-md border border-line bg-bg px-4 py-3 text-base text-ink outline-none focus:ring-2 focus:ring-chili/25"
+						})]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-col gap-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Label, {
+							htmlFor: "custom-photo",
+							children: "Foto"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("input", {
+							id: "custom-photo",
+							type: "file",
+							accept: "image/*",
+							capture: "environment",
+							className: "h-12 w-full text-sm text-muted file:mr-3 file:h-10 file:rounded-sm file:border-0 file:bg-line file:px-3 file:text-sm file:font-medium file:text-ink",
+							onChange: (e) => void onCustomFile(e.target.files?.[0])
+						})]
+					}),
+					customPhoto && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("img", {
+						src: customPhoto,
+						alt: "",
+						className: "h-28 w-full rounded-md object-cover"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "grid grid-cols-2 gap-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+							variant: "outline",
+							disabled: customBusy,
+							onClick: () => {
+								setAddingCustom(false);
+								setCustomName("");
+								setCustomNotes("");
+								setCustomPhoto(null);
+							},
+							children: "Cancelar"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+							disabled: customBusy,
+							onClick: async () => {
+								setCustomBusy(true);
+								try {
+									await saveCustomDish({ data: {
+										name: customName,
+										photoUrl: customPhoto,
+										notes: customNotes
+									} });
+									pickDish(customName.trim(), customPhoto, customNotes);
+									setAddingCustom(false);
+									setCustomName("");
+									setCustomNotes("");
+									setCustomPhoto(null);
+									toast.success("Platillo guardado.");
+									onRefresh();
+								} catch (err) {
+									toast.error(err instanceof Error ? err.message : "No se pudo guardar.");
+								} finally {
+									setCustomBusy(false);
+								}
+							},
+							children: customBusy ? "Guardando…" : "Guardar"
+						})]
+					})
+				]
+			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
 				className: "flex flex-col gap-2",
 				children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Label, {
@@ -401,7 +560,6 @@ function Stat({ label, value }) {
 }
 function ReservationList({ board, onRefresh }) {
 	const rows = board.day?.reservations ?? [];
-	const debts = rows.filter((r) => r.paymentStatus === "debt");
 	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
 		className: "flex flex-col gap-3",
 		children: [
@@ -412,10 +570,6 @@ function ReservationList({ board, onRefresh }) {
 			rows.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
 				className: "text-sm text-muted",
 				children: "Nadie ha reservado todavía."
-			}),
-			debts.length > 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
-				className: "rounded-md border border-warn/30 bg-warn-soft px-3 py-2 text-sm text-ink",
-				children: ["Deudas: ", debts.map((d) => d.name).join(", ")]
 			}),
 			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
 				className: "flex flex-col gap-3",
@@ -486,21 +640,22 @@ function ReservationCard({ row, onRefresh }) {
 						size: "sm",
 						variant: "leaf",
 						disabled: busy,
-						onClick: () => void patch({
-							deliveryStatus: "delivered",
-							paymentStatus: "cash"
-						}),
-						children: "Ya llegué · cash"
+						onClick: () => void patch({ deliveryStatus: "delivered" }),
+						children: "Ya llegué"
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
 						size: "sm",
 						variant: "outline",
 						disabled: busy,
-						onClick: () => void patch({
-							paymentStatus: "online",
-							deliveryStatus: "delivered"
-						}),
-						children: "Pagó en línea"
+						onClick: () => void patch({ paymentStatus: "cash" }),
+						children: "Cash"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+						size: "sm",
+						variant: "outline",
+						disabled: busy,
+						onClick: () => void patch({ paymentStatus: "online" }),
+						children: "Pago en línea"
 					}),
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
 						size: "sm",
@@ -512,6 +667,7 @@ function ReservationCard({ row, onRefresh }) {
 					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
 						size: "sm",
 						variant: "ghost",
+						className: "col-span-2",
 						disabled: busy,
 						onClick: () => void patch({ deliveryStatus: "noshow" }),
 						children: "No se presentó"
@@ -594,6 +750,200 @@ function DayActions({ onRefresh }) {
 				children: "Probar recordatorio de mañana"
 			})
 		]
+	});
+}
+function DebtsTab({ board, onRefresh }) {
+	const [name, setName] = (0, import_react.useState)("");
+	const [phone, setPhone] = (0, import_react.useState)("");
+	const [quantity, setQuantity] = (0, import_react.useState)(1);
+	const [busy, setBusy] = (0, import_react.useState)(false);
+	const debts = board.debts ?? [];
+	const debtCents = (board.day?.totals)?.debtCents ?? debts.reduce((n, d) => n + d.amountCents, 0);
+	async function run(fn, ok) {
+		setBusy(true);
+		try {
+			await fn();
+			toast.success(ok);
+			onRefresh();
+			return true;
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : "No se pudo actualizar.");
+			return false;
+		} finally {
+			setBusy(false);
+		}
+	}
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("section", {
+		className: "flex flex-col gap-5 pb-16",
+		children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h2", {
+				className: "font-display text-2xl text-ink",
+				children: "Deudas"
+			}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("p", {
+				className: "text-sm text-muted",
+				children: [formatMoney(debtCents), " abiertas. +10 y −10 mueven un plato."]
+			})] }),
+			board.day && /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+				className: "grid grid-cols-3 gap-2",
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, {
+						label: "Cobrado",
+						value: formatMoney(board.day.totals.collectedCents)
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, {
+						label: "Pendiente",
+						value: formatMoney(board.day.totals.pendingCents)
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Stat, {
+						label: "Deudas",
+						value: formatMoney(board.day.totals.debtCents)
+					})
+				]
+			}),
+			debts.length === 0 && /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "text-sm text-muted",
+				children: "Nadie debe nada. Márcalo en una reserva o agrégalo abajo."
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("ul", {
+				className: "flex flex-col gap-3",
+				children: debts.map((row) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(DebtCard, {
+					row,
+					busy,
+					run
+				}, row.id))
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("form", {
+				className: "flex flex-col gap-3 border-t border-line pt-6",
+				onSubmit: (e) => {
+					e.preventDefault();
+					run(() => addDebt({ data: {
+						name,
+						phone,
+						quantity
+					} }), "Deuda agregada.").then((ok) => {
+						if (!ok) return;
+						setName("");
+						setPhone("");
+						setQuantity(1);
+					});
+				},
+				children: [
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h3", {
+						className: "font-display text-xl text-ink",
+						children: "Agregar a mano"
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-col gap-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Label, {
+							htmlFor: "debt-name",
+							children: "Nombre"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
+							id: "debt-name",
+							value: name,
+							onChange: (e) => setName(e.target.value),
+							required: true
+						})]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-col gap-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Label, {
+							htmlFor: "debt-phone",
+							children: "Teléfono"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
+							id: "debt-phone",
+							type: "tel",
+							inputMode: "tel",
+							value: phone,
+							onChange: (e) => setPhone(e.target.value),
+							required: true
+						})]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+						className: "flex flex-col gap-2",
+						children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Label, {
+							htmlFor: "debt-qty",
+							children: "Platos a $10"
+						}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)(Input, {
+							id: "debt-qty",
+							type: "number",
+							min: 1,
+							max: 40,
+							value: quantity,
+							onChange: (e) => setQuantity(Number(e.target.value))
+						})]
+					}),
+					/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+						type: "submit",
+						size: "lg",
+						disabled: busy,
+						children: busy ? "Guardando…" : `Agregar ${formatMoney(quantity * board.priceCents)}`
+					})
+				]
+			})
+		]
+	});
+}
+function DebtCard({ row, busy, run }) {
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("li", {
+		className: "rounded-lg border border-line bg-raised p-4",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "flex items-start justify-between gap-3",
+			children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", { children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "text-base font-semibold text-ink",
+					children: row.name
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "text-sm tabular-nums text-muted",
+					children: row.phoneDisplay
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+					className: "mt-1 text-xs capitalize text-muted",
+					children: row.dateLabel
+				})
+			] }), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+				className: "font-display text-xl tabular-nums text-ink",
+				children: formatMoney(row.amountCents)
+			})]
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+			className: "mt-3 grid grid-cols-2 gap-2",
+			children: [
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+					size: "sm",
+					variant: "outline",
+					disabled: busy,
+					onClick: () => void run(() => adjustDebt({ data: {
+						id: row.id,
+						deltaPlates: 1
+					} }), "Sumó $10."),
+					children: "+10"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+					size: "sm",
+					variant: "outline",
+					disabled: busy || row.amountCents < 1e3,
+					onClick: () => void run(() => adjustDebt({ data: {
+						id: row.id,
+						deltaPlates: -1
+					} }), "Restó $10."),
+					children: "−10"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+					size: "sm",
+					variant: "leaf",
+					disabled: busy,
+					onClick: () => void run(() => payDebt({ data: { id: row.id } }), "Marcada como pagada."),
+					children: "Ya pagó"
+				}),
+				/* @__PURE__ */ (0, import_jsx_runtime.jsx)(Button, {
+					size: "sm",
+					variant: "ghost",
+					disabled: busy,
+					onClick: () => void run(() => removeDebt({ data: { id: row.id } }), "Deuda quitada."),
+					children: "Quitar deuda"
+				})
+			]
+		})]
 	});
 }
 function HistoryTab({ board }) {

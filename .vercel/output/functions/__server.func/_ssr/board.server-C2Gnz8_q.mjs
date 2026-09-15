@@ -1,7 +1,8 @@
 import { a as computePhase, c as nextServiceDate, d as weekdayLabel, i as addDaysYmd, l as readClock, n as PRICE_CENTS, o as dateLabel, r as TIMEZONE, s as isWeekend, t as DISH_PRESETS, u as timeLabelFromIso } from "./time-D7K8VdEQ.mjs";
 import { createHash, randomBytes, randomInt, scryptSync, timingSafeEqual } from "node:crypto";
-//#region node_modules/.nitro/vite/services/ssr/assets/board.server-Dw9T4BGx.js
+//#region node_modules/.nitro/vite/services/ssr/assets/board.server-C2Gnz8_q.js
 var _0002_schema_default = "-- Hoy Hay: daily high-school lunch plates (unowned rows; admin gated in app code)\n\ncreate table if not exists settings (\n  id integer primary key check (id = 1),\n  max_per_person integer not null default 3,\n  capacity integer not null default 10,\n  price_cents integer not null default 1000,\n  timezone text not null default 'America/Chicago',\n  cutoff_hour integer not null default 8,\n  leftover_end_hour integer not null default 15,\n  admin_username text not null default 'admin',\n  admin_password_hash text not null,\n  vendor_phone text,\n  sms_enabled boolean not null default false,\n  phase_override text,\n  updated_at timestamptz not null default now()\n);\n\ncreate table if not exists service_days (\n  id serial primary key,\n  service_date date not null unique,\n  dish_name text not null,\n  photo_url text,\n  notes text,\n  capacity integer not null default 10,\n  price_cents integer not null default 1000,\n  status text not null default 'open',\n  cancel_message text,\n  created_at timestamptz not null default now()\n);\n\ncreate index if not exists service_days_date_idx on service_days (service_date desc);\n\ncreate table if not exists reservations (\n  id serial primary key,\n  service_day_id integer not null references service_days(id) on delete cascade,\n  name text not null,\n  phone text not null,\n  quantity integer not null check (quantity > 0),\n  payment_method text not null default 'cash',\n  payment_status text not null default 'pending',\n  delivery_status text not null default 'reserved',\n  phone_verified boolean not null default true,\n  created_at timestamptz not null default now()\n);\n\ncreate index if not exists reservations_day_idx on reservations (service_day_id);\ncreate index if not exists reservations_phone_idx on reservations (phone);\n\ncreate table if not exists sms_challenges (\n  id serial primary key,\n  phone text not null,\n  code_hash text not null,\n  name text not null,\n  quantity integer not null,\n  payment_method text not null,\n  service_day_id integer not null references service_days(id) on delete cascade,\n  expires_at timestamptz not null,\n  created_at timestamptz not null default now()\n);\n\ncreate index if not exists sms_challenges_phone_idx on sms_challenges (phone);\n\ncreate table if not exists admin_sessions (\n  token text primary key,\n  created_at timestamptz not null default now(),\n  expires_at timestamptz not null\n);\n";
+var _0003_debts_dishes_default = "-- Debts ledger (open / paid / removed) and extra dish tiles for admin\n\ncreate table if not exists debts (\n  id serial primary key,\n  reservation_id integer references reservations(id) on delete set null,\n  name text not null,\n  phone text not null,\n  amount_cents integer not null default 1000,\n  service_date date not null,\n  status text not null default 'open',\n  created_at timestamptz not null default now(),\n  updated_at timestamptz not null default now()\n);\n\ncreate index if not exists debts_status_idx on debts (status);\ncreate index if not exists debts_reservation_idx on debts (reservation_id);\n\ncreate table if not exists custom_dishes (\n  id serial primary key,\n  name text not null,\n  photo_url text,\n  notes text,\n  created_at timestamptz not null default now()\n);\n";
 /**
 * Migration bookkeeping shared by the two appliers — `scripts/migrate.mjs`
 * (deploy, `readdir`) and `src/lib/db.ts` (PGLite preview, `import.meta.glob`).
@@ -119,7 +120,10 @@ async function createPgliteSql() {
 	});
 	const pg = await globalRef.__pgliteInstance__;
 	const migrate = async () => {
-		const migrations = /* #__PURE__ */ Object.assign({ "/migrations/0002_schema.sql": _0002_schema_default });
+		const migrations = /* #__PURE__ */ Object.assign({
+			"/migrations/0002_schema.sql": _0002_schema_default,
+			"/migrations/0003_debts_dishes.sql": _0003_debts_dishes_default
+		});
 		const done = (await pg.query("select name from _migrations")).rows.map((r) => r.name);
 		for (const { name, path } of pendingMigrations(Object.keys(migrations), done)) await pg.transaction(async (tx) => {
 			await tx.exec(migrations[path]);
@@ -234,24 +238,86 @@ async function reservedByPhone(sql, dayId, phone) {
   `;
 	return Number(rows[0]?.qty ?? 0);
 }
-function moneyTotals(reservations, capacity, priceCents) {
-	const active = reservations.filter((r) => r.deliveryStatus !== "cancelled");
-	const platesReserved = active.reduce((n, r) => n + r.quantity, 0);
-	const platesDelivered = active.filter((r) => r.deliveryStatus === "delivered").reduce((n, r) => n + r.quantity, 0);
-	const platesNoshow = active.filter((r) => r.deliveryStatus === "noshow").reduce((n, r) => n + r.quantity, 0);
-	const collectedPlates = active.filter((r) => r.paymentStatus === "cash" || r.paymentStatus === "online").reduce((n, r) => n + r.quantity, 0);
-	const debtPlates = active.filter((r) => r.paymentStatus === "debt").reduce((n, r) => n + r.quantity, 0);
-	const pendingPlates = active.filter((r) => r.paymentStatus === "pending").reduce((n, r) => n + r.quantity, 0);
+function moneyTotals(reservations, capacity, priceCents, debts = []) {
+	const billable = reservations.filter((r) => r.deliveryStatus !== "cancelled" && r.deliveryStatus !== "noshow");
+	const platesReserved = reservations.filter((r) => r.deliveryStatus !== "cancelled").reduce((n, r) => n + r.quantity, 0);
+	const platesDelivered = reservations.filter((r) => r.deliveryStatus === "delivered").reduce((n, r) => n + r.quantity, 0);
+	const platesNoshow = reservations.filter((r) => r.deliveryStatus === "noshow").reduce((n, r) => n + r.quantity, 0);
+	const collectedPlates = billable.filter((r) => r.paymentStatus === "cash" || r.paymentStatus === "online").reduce((n, r) => n + r.quantity, 0);
+	const pendingPlates = billable.filter((r) => r.paymentStatus === "pending").reduce((n, r) => n + r.quantity, 0);
+	const openDebtCents = debts.filter((d) => d.status === "open").reduce((n, d) => n + d.amountCents, 0);
+	const paidManualCents = debts.filter((d) => d.status === "paid" && d.reservationId == null).reduce((n, d) => n + d.amountCents, 0);
 	return {
 		platesReserved,
 		platesDelivered,
 		platesNoshow,
 		capacity,
-		collectedCents: collectedPlates * priceCents,
+		collectedCents: collectedPlates * priceCents + paidManualCents,
 		pendingCents: pendingPlates * priceCents,
-		debtCents: debtPlates * priceCents,
+		debtCents: openDebtCents,
 		potentialCents: platesReserved * priceCents
 	};
+}
+function mapDebt(row) {
+	const serviceDate = ymdOf(row.service_date);
+	return {
+		id: row.id,
+		reservationId: row.reservation_id,
+		name: row.name,
+		phone: row.phone,
+		phoneDisplay: formatPhone(row.phone),
+		amountCents: row.amount_cents,
+		serviceDate,
+		dateLabel: dateLabel(serviceDate),
+		status: row.status || "open"
+	};
+}
+async function loadDebts(sql) {
+	return (await sql`
+    select * from debts
+    where status <> 'removed'
+    order by created_at desc
+  `).map(mapDebt);
+}
+async function loadCustomDishes(sql) {
+	return (await sql`
+    select * from custom_dishes order by created_at asc
+  `).map((row) => ({
+		id: row.id,
+		name: row.name,
+		photo: row.photo_url,
+		notes: row.notes ?? ""
+	}));
+}
+async function upsertReservationDebt(sql, row, serviceDate, priceCents) {
+	const existing = await sql`
+    select id from debts
+    where reservation_id = ${row.id} and status = 'open'
+    limit 1
+  `;
+	const amount = row.quantity * priceCents;
+	if (existing[0]) {
+		await sql`
+      update debts
+      set amount_cents = ${amount},
+          name = ${row.name},
+          phone = ${row.phone},
+          updated_at = now()
+      where id = ${existing[0].id}
+    `;
+		return;
+	}
+	await sql`
+    insert into debts (reservation_id, name, phone, amount_cents, service_date, status)
+    values (${row.id}, ${row.name}, ${row.phone}, ${amount}, ${serviceDate}, 'open')
+  `;
+}
+async function closeLinkedDebt(sql, reservationId, status) {
+	await sql`
+    update debts
+    set status = ${status}, updated_at = now()
+    where reservation_id = ${reservationId} and status = 'open'
+  `;
 }
 function mapReservation(row) {
 	const createdAt = asIso(row.created_at);
@@ -584,7 +650,7 @@ async function logoutAdminData() {
 	await clearAdminCookie();
 	return { ok: true };
 }
-async function buildAdminDay(sql, row) {
+async function buildAdminDay(sql, row, debts = []) {
 	const reservations = (await sql`
     select * from reservations
     where service_day_id = ${row.id}
@@ -607,7 +673,7 @@ async function buildAdminDay(sql, row) {
 		remaining: Math.max(0, row.capacity - reserved),
 		reserved,
 		reservations,
-		totals: moneyTotals(reservations, row.capacity, row.price_cents)
+		totals: moneyTotals(reservations, row.capacity, row.price_cents, debts)
 	};
 }
 async function getAdminBoardData() {
@@ -627,13 +693,17 @@ async function getAdminBoardData() {
 			smsEnabled: false,
 			day: null,
 			upcoming: [],
-			history: []
+			history: [],
+			debts: [],
+			customDishes: []
 		};
 	}
 	const settings = await getSettings(sql);
 	const clock = readClock();
+	const debts = await loadDebts(sql);
+	const customDishes = await loadCustomDishes(sql);
 	const dayRow = await pickActiveDay(sql, clock.ymd);
-	const day = dayRow ? await buildAdminDay(sql, dayRow) : null;
+	const day = dayRow ? await buildAdminDay(sql, dayRow, debts) : null;
 	const override = settings.phase_override === "early" || settings.phase_override === "leftover" ? settings.phase_override : null;
 	const phase = computePhase({
 		clock,
@@ -692,7 +762,9 @@ async function getAdminBoardData() {
 		smsEnabled: Boolean(settings.sms_enabled),
 		day,
 		upcoming,
-		history
+		history,
+		debts: debts.filter((d) => d.status === "open"),
+		customDishes
 	};
 }
 async function publishDayData(input) {
@@ -767,12 +839,97 @@ async function updateReservationData(input) {
 	await requireAdmin(sql);
 	const rows = await sql`select * from reservations where id = ${input.id}`;
 	if (!rows[0]) throw new Error("Reserva no encontrada.");
+	const paymentStatus = input.paymentStatus ?? rows[0].payment_status;
+	const deliveryStatus = input.deliveryStatus ?? rows[0].delivery_status;
 	await sql`
     update reservations
-    set payment_status = ${input.paymentStatus ?? rows[0].payment_status},
-        delivery_status = ${input.deliveryStatus ?? rows[0].delivery_status}
+    set payment_status = ${paymentStatus},
+        delivery_status = ${deliveryStatus}
     where id = ${input.id}
   `;
+	const updated = {
+		...rows[0],
+		payment_status: paymentStatus,
+		delivery_status: deliveryStatus
+	};
+	const dayRows = await sql`
+    select service_date, price_cents from service_days where id = ${updated.service_day_id}
+  `;
+	const serviceDate = ymdOf(dayRows[0]?.service_date ?? readClock().ymd);
+	const priceCents = Number(dayRows[0]?.price_cents ?? 1e3);
+	if (deliveryStatus === "noshow") await closeLinkedDebt(sql, updated.id, "removed");
+	else if (paymentStatus === "debt") await upsertReservationDebt(sql, updated, serviceDate, priceCents);
+	else if (paymentStatus === "cash" || paymentStatus === "online") await closeLinkedDebt(sql, updated.id, "paid");
+	return { ok: true };
+}
+async function addDebtData(input) {
+	const sql = await getSql();
+	await requireAdmin(sql);
+	const name = input.name.trim();
+	if (name.length < 2) throw new Error("Pon el nombre.");
+	const phone = normalizePhone(input.phone);
+	if (!phone) throw new Error("Pon un número de EE.UU. de 10 dígitos.");
+	const qty = Math.max(1, Math.floor(input.quantity));
+	const clock = readClock();
+	const dayRow = await pickActiveDay(sql, clock.ymd);
+	const serviceDate = dayRow ? ymdOf(dayRow.service_date) : clock.ymd;
+	const id = (await sql`
+    insert into debts (reservation_id, name, phone, amount_cents, service_date, status)
+    values (null, ${name}, ${phone}, ${qty * (await getSettings(sql)).price_cents}, ${serviceDate}, 'open')
+    returning id
+  `)[0]?.id;
+	if (!id) throw new Error("No se pudo guardar la deuda.");
+	return { id };
+}
+async function adjustDebtData(input) {
+	const sql = await getSql();
+	await requireAdmin(sql);
+	const rows = await sql`select * from debts where id = ${input.id} and status = 'open'`;
+	if (!rows[0]) throw new Error("Deuda no encontrada.");
+	const settings = await getSettings(sql);
+	await sql`
+    update debts set amount_cents = ${Math.max(0, rows[0].amount_cents + input.deltaPlates * settings.price_cents)}, updated_at = now() where id = ${input.id}
+  `;
+	return { ok: true };
+}
+async function payDebtData(input) {
+	const sql = await getSql();
+	await requireAdmin(sql);
+	const rows = await sql`select * from debts where id = ${input.id} and status = 'open'`;
+	if (!rows[0]) throw new Error("Deuda no encontrada.");
+	await sql`update debts set status = 'paid', updated_at = now() where id = ${input.id}`;
+	if (rows[0].reservation_id) await sql`
+      update reservations
+      set payment_status = 'cash'
+      where id = ${rows[0].reservation_id}
+    `;
+	return { ok: true };
+}
+async function removeDebtData(input) {
+	const sql = await getSql();
+	await requireAdmin(sql);
+	if (!(await sql`select * from debts where id = ${input.id} and status = 'open'`)[0]) throw new Error("Deuda no encontrada.");
+	await sql`update debts set status = 'removed', updated_at = now() where id = ${input.id}`;
+	return { ok: true };
+}
+async function saveCustomDishData(input) {
+	const sql = await getSql();
+	await requireAdmin(sql);
+	const name = input.name.trim();
+	if (name.length < 2) throw new Error("Pon el nombre del platillo.");
+	const notes = input.notes.trim() || null;
+	const id = (await sql`
+    insert into custom_dishes (name, photo_url, notes)
+    values (${name}, ${input.photoUrl?.trim() || null}, ${notes})
+    returning id
+  `)[0]?.id;
+	if (!id) throw new Error("No se pudo guardar el platillo.");
+	return { id };
+}
+async function deleteCustomDishData(input) {
+	const sql = await getSql();
+	await requireAdmin(sql);
+	await sql`delete from custom_dishes where id = ${input.id}`;
 	return { ok: true };
 }
 async function saveConfigData(input) {
@@ -806,4 +963,4 @@ async function reminderPreviewData() {
 	};
 }
 //#endregion
-export { cancelDayData, closeDayData, confirmReserveData, getAdminBoardData, getPublicBoardData, loginAdminData, logoutAdminData, publishDayData, reminderPreviewData, saveConfigData, startReserveData, updateReservationData };
+export { addDebtData, adjustDebtData, cancelDayData, closeDayData, confirmReserveData, deleteCustomDishData, getAdminBoardData, getPublicBoardData, loginAdminData, logoutAdminData, payDebtData, publishDayData, reminderPreviewData, removeDebtData, saveConfigData, saveCustomDishData, startReserveData, updateReservationData };
